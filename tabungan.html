@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=yes">
-  <title>VLCrave Express | Driver Cash Management</title>
+  <title>VLCrave Express | Driver Cash Management + Piutang Rincian Item</title>
   <!-- Google Fonts + Tailwind + SweetAlert + Font Awesome -->
   <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap" rel="stylesheet">
   <script src="https://cdn.tailwindcss.com"></script>
@@ -21,7 +21,6 @@
       background: linear-gradient(135deg, #0a0e27 0%, #1a1f3a 100%);
       min-height: 100vh;
     }
-    /* Glassmorphism effect */
     .glass {
       background: rgba(255, 255, 255, 0.07);
       backdrop-filter: blur(12px);
@@ -38,7 +37,6 @@
       border-color: rgba(255, 140, 0, 0.3);
       transform: translateY(-2px);
     }
-    /* Custom scrollbar */
     ::-webkit-scrollbar {
       width: 4px;
     }
@@ -50,7 +48,6 @@
       background: #f97316;
       border-radius: 10px;
     }
-    /* Number input styling */
     input[type="number"]::-webkit-inner-spin-button,
     input[type="number"]::-webkit-outer-spin-button {
       -webkit-appearance: none;
@@ -67,6 +64,20 @@
     .clock-active {
       animation: pulseGlow 1.5s infinite;
     }
+    /* Untuk item dinamis di modal */
+    .item-row {
+      background: rgba(255,255,255,0.05);
+      border-radius: 16px;
+      padding: 12px;
+      margin-bottom: 12px;
+      transition: 0.2s;
+    }
+    .remove-item-btn {
+      transition: 0.2s;
+    }
+    .remove-item-btn:hover {
+      background: rgba(220,38,38,0.3);
+    }
   </style>
 </head>
 <body class="text-white">
@@ -81,7 +92,7 @@
         </div>
         <div>
           <h1 class="text-2xl md:text-3xl font-extrabold tracking-tight bg-gradient-to-r from-orange-400 to-amber-300 bg-clip-text text-transparent">VLCrave Express</h1>
-          <p class="text-xs text-gray-400"><i class="fas fa-map-marker-alt"></i> Driver Cash Management System</p>
+          <p class="text-xs text-gray-400"><i class="fas fa-map-marker-alt"></i> Driver Cash Management | Piutang Itemized</p>
         </div>
       </div>
       <div class="flex gap-2">
@@ -179,12 +190,12 @@
       </div>
     </div>
 
-    <!-- PIUTANG SECTION (Receivables) -->
+    <!-- PIUTANG SECTION (Receivables dengan CRUD & Modal Rincian Item) -->
     <div class="glass-card rounded-2xl p-5 mb-6">
       <div class="flex flex-wrap justify-between items-center mb-4 pb-2 border-b border-white/10">
         <div class="flex items-center gap-3">
           <div class="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center"><i class="fas fa-hand-holding-usd text-amber-400 text-xl"></i></div>
-          <h3 class="font-bold text-lg">Piutang & Tagihan</h3>
+          <h3 class="font-bold text-lg">Piutang & Tagihan (Itemized)</h3>
         </div>
         <button id="addPiutangBtn" class="bg-orange-500/20 hover:bg-orange-500/30 px-4 py-2 rounded-xl text-sm font-semibold transition-all"><i class="fas fa-plus-circle"></i> Tambah Piutang</button>
       </div>
@@ -226,7 +237,7 @@
     
     // Collections
     const shiftsRef = db.collection("vlcrave_shifts");
-    const piutangRef = db.collection("vlcrave_piutang");
+    const piutangRef = db.collection("vlcrave_piutang_itemized"); // collection baru dengan rincian
     
     let currentShiftId = null;
     let currentShiftData = null;
@@ -236,12 +247,11 @@
       return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(angka);
     }
     
-    // Helper SweetAlert
     function showToast(icon, title, text) {
-      Swal.fire({ icon, title, text, background: '#1a1f2e', color: '#fff', confirmButtonColor: '#f97316', timer: 2500, showConfirmButton: false });
+      Swal.fire({ icon, title, text, background: '#1a1f2e', color: '#fff', confirmButtonColor: '#f97316', timer: 2000, showConfirmButton: false });
     }
     
-    // Load Active Shift (belum clock out)
+    // Load Active Shift
     async function loadActiveShift() {
       const snapshot = await shiftsRef.where("clockOut", "==", null).orderBy("clockInTime", "desc").limit(1).get();
       if (!snapshot.empty) {
@@ -267,7 +277,6 @@
       if (activeShiftDoc) {
         const data = activeShiftDoc.data();
         currentShiftId = activeShiftDoc.id;
-        // Clock In aktif
         shiftStatusText.innerHTML = '<i class="fas fa-play-circle text-emerald-400"></i> Shift Berjalan';
         shiftDetailInfo.innerHTML = `<i class="far fa-clock"></i> Mulai: ${new Date(data.clockInTime?.toDate()).toLocaleString('id-ID')}`;
         clockStatusIcon.innerHTML = '<i class="fas fa-check-circle text-emerald-400 text-xl"></i>';
@@ -276,23 +285,23 @@
         clockInFormDiv.classList.add("hidden");
         clockInInfoDiv.classList.remove("hidden");
         document.getElementById("clockInTimeDisplay").innerText = new Date(data.clockInTime?.toDate()).toLocaleString();
-        document.getElementById("displayAwalBCA").innerText = formatRupiah(data.saldoAwalBCA);
-        document.getElementById("displayAwalTunai").innerText = formatRupiah(data.saldoAwalTunai);
+        document.getElementById("displayAwalBCA").innerHTML = formatRupiah(data.saldoAwalBCA);
+        document.getElementById("displayAwalTunai").innerHTML = formatRupiah(data.saldoAwalTunai);
         
-        // Cek apakah sudah clock out? data.clockOut ada? karena query hanya yg clockOut null, jadi blm ada clock out
         clockOutFormDiv.classList.remove("hidden");
         needClockInWarning.classList.add("hidden");
         
-        // Prefill form saldo akhir?
-        if (data.saldoAkhirBCA !== undefined) {
-          // sudah clock out, tapi karena query hanya null, seharusnya tidak terjadi. Tapi safety
+        // Jika sudah pernah clock out sebagian? tidak mungkin karena clockOut null. Tapi jika ada saldo akhir dari update bayar piutang tampilkan
+        if (data.saldoAkhirBCA !== undefined && data.saldoAkhirBCA !== null) {
+          document.getElementById("displayAkhirBCA").innerHTML = formatRupiah(data.saldoAkhirBCA);
+          document.getElementById("displayAkhirTunai").innerHTML = formatRupiah(data.saldoAkhirTunai);
+          document.getElementById("clockOutInfo").classList.remove("hidden");
         } else {
-          document.getElementById("saldoAkhirBCA").value = "";
-          document.getElementById("saldoAkhirTunai").value = "";
           document.getElementById("clockOutInfo").classList.add("hidden");
         }
+        document.getElementById("saldoAkhirBCA").value = "";
+        document.getElementById("saldoAkhirTunai").value = "";
       } else {
-        // Tidak ada shift aktif
         shiftStatusText.innerHTML = '<i class="fas fa-stop-circle text-gray-400"></i> Belum Clock In';
         shiftDetailInfo.innerHTML = '<i class="far fa-calendar-times"></i> Tidak ada shift aktif';
         clockStatusIcon.innerHTML = '<i class="fas fa-clock text-gray-500 text-xl"></i>';
@@ -306,7 +315,7 @@
       }
     }
     
-    // CLOCK IN Function
+    // CLOCK IN
     document.getElementById("clockInBtn").addEventListener("click", async () => {
       const saldoBCA = parseInt(document.getElementById("saldoAwalBCA").value);
       const saldoTunai = parseInt(document.getElementById("saldoAwalTunai").value);
@@ -314,13 +323,9 @@
         showToast("error", "Error", "Masukkan nominal saldo awal yang valid!");
         return;
       }
-      if (saldoBCA < 0 || saldoTunai < 0) {
-        showToast("warning", "Perhatian", "Saldo tidak boleh negatif");
-        return;
-      }
       const existing = await loadActiveShift();
       if (existing) {
-        showToast("info", "Shift Aktif", "Selesaikan shift sebelumnya terlebih dahulu dengan Clock Out");
+        showToast("info", "Shift Aktif", "Selesaikan shift sebelumnya dengan Clock Out");
         return;
       }
       await shiftsRef.add({
@@ -331,16 +336,17 @@
         saldoAkhirBCA: null,
         saldoAkhirTunai: null,
         profitLoss: null,
+        profitLossStatus: null,
         clockOutTime: null
       });
-      showToast("success", "Clock In Berhasil", "Shift dimulai! Saldo awal tercatat.");
+      showToast("success", "Clock In Berhasil", "Shift dimulai!");
       document.getElementById("saldoAwalBCA").value = "";
       document.getElementById("saldoAwalTunai").value = "";
       await updateUIByShift();
       loadHistoryShifts();
     });
     
-    // CLOCK OUT Function + perhitungan untung/rugi
+    // CLOCK OUT
     document.getElementById("clockOutBtn").addEventListener("click", async () => {
       if (!currentShiftId) {
         showToast("error", "Tidak Ada Shift", "Lakukan Clock In terlebih dahulu");
@@ -360,43 +366,170 @@
       const totalAkhir = akhirBCA + akhirTunai;
       const selisih = totalAkhir - totalAwal;
       const status = selisih >= 0 ? "Untung" : "Rugi";
-      const profitLossValue = selisih;
       
       await shiftsRef.doc(currentShiftId).update({
         clockOut: true,
         clockOutTime: firebase.firestore.FieldValue.serverTimestamp(),
         saldoAkhirBCA: akhirBCA,
         saldoAkhirTunai: akhirTunai,
-        profitLoss: profitLossValue,
+        profitLoss: selisih,
         profitLossStatus: status
       });
       
-      // Tampilkan hasil di modal SweetAlert modern
       Swal.fire({
         title: status === "Untung" ? "✨ Hasil Shift + Plus" : "⚠️ Hasil Shift Minus",
-        html: `<div class="text-left">
-          <p><i class="fas fa-chart-line"></i> Total Awal: ${formatRupiah(totalAwal)}</p>
-          <p><i class="fas fa-chart-line"></i> Total Akhir: ${formatRupiah(totalAkhir)}</p>
-          <p class="font-bold ${selisih>=0 ? 'text-emerald-400' : 'text-rose-400'}">${status} : ${formatRupiah(Math.abs(selisih))}</p>
-        </div>`,
+        html: `<div class="text-left"><p>Total Awal: ${formatRupiah(totalAwal)}</p><p>Total Akhir: ${formatRupiah(totalAkhir)}</p><p class="font-bold">${status} : ${formatRupiah(Math.abs(selisih))}</p></div>`,
         icon: selisih >= 0 ? "success" : "error",
         background: "#1a1f2e",
         confirmButtonColor: "#f97316"
       });
-      
-      document.getElementById("clockOutInfo").classList.remove("hidden");
-      document.getElementById("clockOutTimeDisplay").innerText = new Date().toLocaleString();
-      document.getElementById("displayAkhirBCA").innerText = formatRupiah(akhirBCA);
-      document.getElementById("displayAkhirTunai").innerText = formatRupiah(akhirTunai);
-      const resultDiv = document.getElementById("resultProfitLoss");
-      resultDiv.innerHTML = `<span class="${selisih>=0 ? 'text-emerald-400' : 'text-rose-400'}"><i class="fas ${selisih>=0 ? 'fa-arrow-up' : 'fa-arrow-down'}"></i> ${status} ${formatRupiah(Math.abs(selisih))}</span>`;
-      
       await updateUIByShift();
       loadHistoryShifts();
-      loadPiutang();
     });
     
-    // PIUTANG: Load, Add, Bayar
+    // ======================== PIUTANG CRUD DENGAN MODAL RINCIAN ITEM (QTY, HARGA) ========================
+    // Fungsi untuk membuka modal tambah piutang dengan item dinamis
+    function openTambahPiutangModal() {
+      // menyimpan item sementara
+      let items = []; // array { namaProduk, qty, harga, subtotal }
+      
+      // Render daftar item di modal
+      const renderItems = (container, itemsArray) => {
+        if (!container) return;
+        if (itemsArray.length === 0) {
+          container.innerHTML = `<div class="text-center text-gray-400 py-3 text-sm">Belum ada item, klik "Tambah Item"</div>`;
+          return;
+        }
+        let html = '';
+        itemsArray.forEach((item, idx) => {
+          const subtotal = (item.qty || 0) * (item.harga || 0);
+          html += `
+            <div class="item-row flex flex-wrap gap-3 items-end border-b border-white/10 pb-3 mb-3">
+              <div class="flex-1 min-w-[120px]">
+                <label class="text-xs text-gray-300">Nama Produk</label>
+                <input type="text" data-idx="${idx}" class="item-nama w-full px-2 py-1 rounded-lg bg-black/40 border border-white/20 text-sm" value="${escapeHtml(item.namaProduk)}">
+              </div>
+              <div class="w-24">
+                <label class="text-xs text-gray-300">Qty</label>
+                <input type="number" data-idx="${idx}" class="item-qty w-full px-2 py-1 rounded-lg bg-black/40 border border-white/20 text-sm" value="${item.qty}">
+              </div>
+              <div class="w-32">
+                <label class="text-xs text-gray-300">Harga (Rp)</label>
+                <input type="number" data-idx="${idx}" class="item-harga w-full px-2 py-1 rounded-lg bg-black/40 border border-white/20 text-sm" value="${item.harga}">
+              </div>
+              <div class="text-right min-w-[80px]">
+                <div class="text-xs text-gray-300">Subtotal</div>
+                <div class="text-sm font-mono">${formatRupiah(subtotal)}</div>
+              </div>
+              <button type="button" data-idx="${idx}" class="remove-item-btn bg-red-500/30 hover:bg-red-500/50 px-2 py-1 rounded-lg text-xs"><i class="fas fa-trash"></i></button>
+            </div>
+          `;
+        });
+        container.innerHTML = html;
+        
+        // attach event listeners untuk update array
+        document.querySelectorAll('.item-nama').forEach(inp => {
+          inp.addEventListener('change', (e) => { const idx = parseInt(e.target.dataset.idx); if (!isNaN(idx) && itemsArray[idx]) itemsArray[idx].namaProduk = e.target.value; updateTotalPiutang(); });
+        });
+        document.querySelectorAll('.item-qty').forEach(inp => {
+          inp.addEventListener('change', (e) => { const idx = parseInt(e.target.dataset.idx); if (!isNaN(idx) && itemsArray[idx]) { itemsArray[idx].qty = parseInt(e.target.value) || 0; updateTotalPiutang(); } });
+        });
+        document.querySelectorAll('.item-harga').forEach(inp => {
+          inp.addEventListener('change', (e) => { const idx = parseInt(e.target.dataset.idx); if (!isNaN(idx) && itemsArray[idx]) { itemsArray[idx].harga = parseInt(e.target.value) || 0; updateTotalPiutang(); } });
+        });
+        document.querySelectorAll('.remove-item-btn').forEach(btn => {
+          btn.addEventListener('click', (e) => { const idx = parseInt(btn.dataset.idx); if (!isNaN(idx)) { itemsArray.splice(idx,1); renderItems(container, itemsArray); updateTotalPiutang(); } });
+        });
+      };
+      
+      const updateTotalPiutang = () => {
+        const totalSpan = document.getElementById('dynamicTotalPiutang');
+        if (totalSpan) {
+          let total = 0;
+          items.forEach(i => { total += (i.qty || 0) * (i.harga || 0); });
+          totalSpan.innerText = formatRupiah(total);
+        }
+      };
+      
+      // Buat modal dengan SweetAlert2 custom
+      Swal.fire({
+        title: '<i class="fas fa-file-invoice-dollar"></i> Tambah Piutang (Itemized)',
+        html: `
+          <div class="text-left">
+            <div class="mb-4">
+              <label class="text-sm font-semibold block text-left mb-1">Nama Debitur</label>
+              <input id="debiturName" class="swal2-input w-full" placeholder="Contoh: Toko Sinar Jaya" style="margin:0;">
+            </div>
+            <div class="mb-2 flex justify-between items-center">
+              <label class="text-sm font-semibold">Rincian Item (Produk, Qty, Harga)</label>
+              <button type="button" id="btnTambahItemModal" class="bg-amber-600/60 hover:bg-amber-600 text-xs px-3 py-1 rounded-full"><i class="fas fa-plus"></i> Tambah Item</button>
+            </div>
+            <div id="itemsContainerModal" class="max-h-64 overflow-y-auto mb-4 p-1"></div>
+            <div class="border-t border-white/20 pt-3 mt-2 text-right">
+              <span class="text-lg font-bold">Total Piutang : </span>
+              <span id="dynamicTotalPiutang" class="text-xl font-bold text-amber-400">Rp 0</span>
+            </div>
+          </div>
+        `,
+        showCancelButton: true,
+        confirmButtonText: 'Simpan Piutang',
+        cancelButtonText: 'Batalkan',
+        background: '#1a1f2e',
+        color: '#fff',
+        confirmButtonColor: '#f97316',
+        cancelButtonColor: '#6b7280',
+        width: '700px',
+        preConfirm: () => {
+          const namaDebitur = document.getElementById('debiturName').value.trim();
+          if (!namaDebitur) {
+            Swal.showValidationMessage('Nama debitur wajib diisi');
+            return false;
+          }
+          if (items.length === 0) {
+            Swal.showValidationMessage('Minimal tambah satu item produk');
+            return false;
+          }
+          // hitung total nominal
+          let totalNominal = 0;
+          items.forEach(it => { totalNominal += (it.qty || 0) * (it.harga || 0); });
+          if (totalNominal <= 0) {
+            Swal.showValidationMessage('Total piutang harus lebih dari 0');
+            return false;
+          }
+          return { namaDebitur, items: [...items], totalNominal };
+        },
+        didOpen: () => {
+          const container = document.getElementById('itemsContainerModal');
+          const btnTambah = document.getElementById('btnTambahItemModal');
+          if (btnTambah) {
+            btnTambah.addEventListener('click', () => {
+              items.push({ namaProduk: '', qty: 1, harga: 0 });
+              renderItems(container, items);
+              updateTotalPiutang();
+            });
+          }
+          renderItems(container, items);
+          updateTotalPiutang();
+        }
+      }).then(async (result) => {
+        if (result.isConfirmed && result.value) {
+          const { namaDebitur, items, totalNominal } = result.value;
+          // Simpan ke Firestore
+          await piutangRef.add({
+            namaDebitur: namaDebitur,
+            items: items,
+            nominal: totalNominal,
+            status: "belum",
+            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+            tanggalPiutang: firebase.firestore.FieldValue.serverTimestamp()
+          });
+          showToast("success", "Piutang Ditambahkan", `Total piutang ${formatRupiah(totalNominal)} dengan ${items.length} item`);
+          loadPiutang();
+        }
+      });
+    }
+    
+    // Menampilkan list piutang dengan detail item dan tombol bayar/hapus
     async function loadPiutang() {
       const snapshot = await piutangRef.orderBy("createdAt", "desc").get();
       const container = document.getElementById("piutangList");
@@ -409,13 +542,19 @@
         const p = doc.data();
         const id = doc.id;
         const isLunas = p.status === "lunas";
+        // Generate ringkasan item
+        let itemPreview = '';
+        if (p.items && p.items.length) {
+          itemPreview = `<div class="text-xs text-gray-400 mt-1 space-y-1">${p.items.slice(0,2).map(it => `${it.namaProduk || 'Produk'} (${it.qty||0} x ${formatRupiah(it.harga||0)})`).join(', ')}${p.items.length > 2 ? ` +${p.items.length-2} item lain` : ''}</div>`;
+        }
         html += `
           <div class="bg-white/5 rounded-xl p-4 border ${isLunas ? 'border-emerald-500/30' : 'border-amber-500/30'}">
             <div class="flex flex-wrap justify-between items-start gap-2">
-              <div><p class="font-bold">${escapeHtml(p.namaDebitur)}</p>
-              <p class="text-xs text-gray-400"><i class="far fa-calendar"></i> ${p.tanggalPiutang ? new Date(p.tanggalPiutang?.toDate()).toLocaleDateString() : '-'}</p>
-              <p class="text-sm mt-1">Nominal: <span class="font-semibold">${formatRupiah(p.nominal)}</span></p>
-              <p class="text-xs">Status: ${isLunas ? '<span class="text-emerald-400"><i class="fas fa-check-circle"></i> Lunas</span>' : '<span class="text-amber-400"><i class="fas fa-hourglass-half"></i> Belum Bayar</span>'}</p>
+              <div class="flex-1">
+                <p class="font-bold">${escapeHtml(p.namaDebitur)}</p>
+                ${itemPreview}
+                <p class="text-sm mt-1">Nominal: <span class="font-semibold">${formatRupiah(p.nominal)}</span></p>
+                <p class="text-xs">Status: ${isLunas ? '<span class="text-emerald-400"><i class="fas fa-check-circle"></i> Lunas</span>' : '<span class="text-amber-400"><i class="fas fa-hourglass-half"></i> Belum Bayar</span>'}</p>
               </div>
               <div class="flex gap-2">
                 ${!isLunas ? `<button onclick="bayarPiutang('${id}', ${p.nominal})" class="bg-emerald-600/40 hover:bg-emerald-600 px-3 py-1.5 rounded-xl text-sm"><i class="fas fa-hand-holding-usd"></i> Bayar</button>` : ''}
@@ -431,44 +570,34 @@
     window.bayarPiutang = async (id, nominal) => {
       const { value: metode } = await Swal.fire({
         title: 'Metode Pembayaran',
-        text: `Pembayaran piutang sebesar ${formatRupiah(nominal)} akan ditambahkan ke saldo?`,
+        text: `Bayar piutang sebesar ${formatRupiah(nominal)}`,
         input: 'select',
         inputOptions: { 'tunai': 'Tunai (Cash)', 'bca': 'Transfer BCA' },
-        inputPlaceholder: 'Pilih metode',
         background: '#1a1f2e',
-        color: '#fff',
         confirmButtonColor: '#f97316'
       });
       if (!metode) return;
       
-      // Update status piutang menjadi lunas
       await piutangRef.doc(id).update({ status: "lunas", metodeBayar: metode, tanggalBayar: firebase.firestore.FieldValue.serverTimestamp() });
       
-      // Cek shift aktif untuk menambahkan saldo otomatis ke tunai atau bca
       const active = await loadActiveShift();
-      if (active) {
+      if (active && currentShiftId) {
         const shiftData = active.data();
-        let newBCA = shiftData.saldoAkhirBCA !== null && shiftData.saldoAkhirBCA !== undefined ? shiftData.saldoAkhirBCA : shiftData.saldoAwalBCA;
-        let newTunai = shiftData.saldoAkhirTunai !== null && shiftData.saldoAkhirTunai !== undefined ? shiftData.saldoAkhirTunai : shiftData.saldoAwalTunai;
-        
+        let newBCA = (shiftData.saldoAkhirBCA !== null && shiftData.saldoAkhirBCA !== undefined) ? shiftData.saldoAkhirBCA : shiftData.saldoAwalBCA;
+        let newTunai = (shiftData.saldoAkhirTunai !== null && shiftData.saldoAkhirTunai !== undefined) ? shiftData.saldoAkhirTunai : shiftData.saldoAwalTunai;
         if (metode === "bca") newBCA += nominal;
         else newTunai += nominal;
-        
-        await shiftsRef.doc(currentShiftId).update({
-          saldoAkhirBCA: newBCA,
-          saldoAkhirTunai: newTunai
-        });
-        showToast("success", "Piutang Lunas", `+${formatRupiah(nominal)} ditambahkan ke ${metode === 'bca' ? 'Saldo BCA' : 'Saldo Tunai'} shift berjalan`);
-        if (currentShiftId) {
-          // refresh tampilan clock out info jika terlihat
-          const shiftDocNow = await shiftsRef.doc(currentShiftId).get();
-          if (shiftDocNow.exists && shiftDocNow.data().saldoAkhirBCA !== null) {
-            document.getElementById("displayAkhirBCA").innerText = formatRupiah(shiftDocNow.data().saldoAkhirBCA);
-            document.getElementById("displayAkhirTunai").innerText = formatRupiah(shiftDocNow.data().saldoAkhirTunai);
-          }
+        await shiftsRef.doc(currentShiftId).update({ saldoAkhirBCA: newBCA, saldoAkhirTunai: newTunai });
+        showToast("success", "Piutang Lunas", `+${formatRupiah(nominal)} ditambahkan ke ${metode === 'bca' ? 'BCA' : 'Tunai'}`);
+        // refresh display clock out info
+        const updated = await shiftsRef.doc(currentShiftId).get();
+        if (updated.exists && updated.data().saldoAkhirBCA !== null) {
+          document.getElementById("displayAkhirBCA").innerHTML = formatRupiah(updated.data().saldoAkhirBCA);
+          document.getElementById("displayAkhirTunai").innerHTML = formatRupiah(updated.data().saldoAkhirTunai);
+          document.getElementById("clockOutInfo").classList.remove("hidden");
         }
       } else {
-        showToast("success", "Piutang Lunas", "Pembayaran dicatat. Tidak ada shift aktif, saldo tidak otomatis ditambah.");
+        showToast("success", "Piutang Lunas", "Tidak ada shift aktif, saldo tidak berubah.");
       }
       loadPiutang();
     };
@@ -482,32 +611,7 @@
       }
     };
     
-    document.getElementById("addPiutangBtn").addEventListener("click", async () => {
-      const { value: form } = await Swal.fire({
-        title: 'Tambah Piutang',
-        html: `<input id="namaDebitur" class="swal2-input" placeholder="Nama Debitur">
-               <input id="nominalPiutang" type="number" class="swal2-input" placeholder="Nominal Piutang">`,
-        focusConfirm: false,
-        background: '#1a1f2e',
-        preConfirm: () => {
-          const nama = document.getElementById("namaDebitur").value;
-          const nominal = parseInt(document.getElementById("nominalPiutang").value);
-          if (!nama || !nominal) Swal.showValidationMessage("Isi semua data");
-          return { nama, nominal };
-        }
-      });
-      if (form) {
-        await piutangRef.add({
-          namaDebitur: form.nama,
-          nominal: form.nominal,
-          status: "belum",
-          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-          tanggalPiutang: firebase.firestore.FieldValue.serverTimestamp()
-        });
-        showToast("success", "Piutang Ditambahkan", "Catatan piutang tersimpan");
-        loadPiutang();
-      }
-    });
+    document.getElementById("addPiutangBtn").addEventListener("click", openTambahPiutangModal);
     
     // Riwayat Shift
     async function loadHistoryShifts() {
@@ -524,28 +628,17 @@
         const clockOutDate = s.clockOutTime?.toDate();
         const profit = s.profitLoss;
         const isProfit = profit >= 0;
-        html += `
-          <div class="bg-white/5 rounded-xl p-3 border border-white/5">
-            <div class="flex justify-between flex-wrap">
-              <span class="text-sm"><i class="fas fa-play-circle text-emerald-400"></i> ${clockInDate?.toLocaleString() || '-'}</span>
-              <span class="text-sm"><i class="fas fa-stop-circle text-rose-400"></i> ${clockOutDate?.toLocaleString() || 'Belum selesai'}</span>
-            </div>
-            <div class="text-xs text-gray-300 mt-1">Saldo Awal: ${formatRupiah((s.saldoAwalBCA||0)+(s.saldoAwalTunai||0))} → Akhir: ${formatRupiah((s.saldoAkhirBCA||0)+(s.saldoAkhirTunai||0))}</div>
-            ${profit !== undefined ? `<div class="text-xs font-bold ${isProfit ? 'text-emerald-400' : 'text-rose-400'} mt-1"><i class="fas ${isProfit ? 'fa-chart-line' : 'fa-chart-line'}"></i> ${isProfit ? 'Untung' : 'Rugi'} ${formatRupiah(Math.abs(profit))}</div>` : ''}
-          </div>
-        `;
+        html += `<div class="bg-white/5 rounded-xl p-3 border border-white/5"><div class="flex justify-between flex-wrap"><span class="text-sm"><i class="fas fa-play-circle text-emerald-400"></i> ${clockInDate?.toLocaleString() || '-'}</span><span class="text-sm"><i class="fas fa-stop-circle text-rose-400"></i> ${clockOutDate?.toLocaleString() || 'Belum selesai'}</span></div><div class="text-xs text-gray-300 mt-1">Saldo Awal: ${formatRupiah((s.saldoAwalBCA||0)+(s.saldoAwalTunai||0))} → Akhir: ${formatRupiah((s.saldoAkhirBCA||0)+(s.saldoAkhirTunai||0))}</div>${profit !== undefined ? `<div class="text-xs font-bold ${isProfit ? 'text-emerald-400' : 'text-rose-400'} mt-1">${isProfit ? 'Untung' : 'Rugi'} ${formatRupiah(Math.abs(profit))}</div>` : ''}</div>`;
       });
       container.innerHTML = html;
     }
     
     function escapeHtml(str) { if(!str) return ''; return str.replace(/[&<>]/g, function(m){if(m==='&') return '&amp;'; if(m==='<') return '&lt;'; if(m==='>') return '&gt;'; return m;}); }
     
-    // Initial Load
     async function init() {
       await updateUIByShift();
       loadHistoryShifts();
       loadPiutang();
-      // Real-time listener untuk piutang & shifts update
       piutangRef.onSnapshot(() => loadPiutang());
       shiftsRef.onSnapshot(() => { updateUIByShift(); loadHistoryShifts(); });
     }
