@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=yes">
+  <title>VLCrave Express | Driver Cash Management</title>
+  <!-- Google Fonts + Tailwind + SweetAlert + Font Awesome -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  
+  <style>
+    * {
+      font-family: 'Inter', sans-serif;
+    }
+    body {
+      background: linear-gradient(135deg, #0a0e27 0%, #1a1f3a 100%);
+      min-height: 100vh;
+    }
+    /* Glassmorphism effect */
+    .glass {
+      background: rgba(255, 255, 255, 0.07);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 28px;
+    }
+    .glass-card {
+      background: rgba(15, 20, 40, 0.6);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      transition: all 0.3s ease;
+    }
+    .glass-card:hover {
+      border-color: rgba(255, 140, 0, 0.3);
+      transform: translateY(-2px);
+    }
+    /* Custom scrollbar */
+    ::-webkit-scrollbar {
+      width: 4px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #1e1f2e;
+      border-radius: 10px;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #f97316;
+      border-radius: 10px;
+    }
+    /* Number input styling */
+    input[type="number"]::-webkit-inner-spin-button,
+    input[type="number"]::-webkit-outer-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+    .balance-number {
+      font-feature-settings: "tnum";
+      font-variant-numeric: tabular-nums;
+    }
+    @keyframes pulseGlow {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(249, 115, 22, 0.4); }
+      50% { box-shadow: 0 0 0 8px rgba(249, 115, 22, 0); }
+    }
+    .clock-active {
+      animation: pulseGlow 1.5s infinite;
+    }
+  </style>
+</head>
+<body class="text-white">
+
+  <div class="max-w-6xl mx-auto px-4 py-5 md:py-8">
+    
+    <!-- Header Brand -->
+    <div class="flex justify-between items-center mb-6 flex-wrap gap-3">
+      <div class="flex items-center gap-3">
+        <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-orange-500 to-amber-600 flex items-center justify-center shadow-xl">
+          <i class="fas fa-truck-fast text-2xl text-white"></i>
+        </div>
+        <div>
+          <h1 class="text-2xl md:text-3xl font-extrabold tracking-tight bg-gradient-to-r from-orange-400 to-amber-300 bg-clip-text text-transparent">VLCrave Express</h1>
+          <p class="text-xs text-gray-400"><i class="fas fa-map-marker-alt"></i> Driver Cash Management System</p>
+        </div>
+      </div>
+      <div class="flex gap-2">
+        <div class="glass px-4 py-2 rounded-full text-sm flex items-center gap-2">
+          <i class="fas fa-cloud-upload-alt text-orange-400"></i>
+          <span class="hidden sm:inline">Firestore Sync</span>
+          <span class="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Status Clock & Quick Info -->
+    <div class="glass p-4 mb-6 flex flex-wrap justify-between items-center gap-3">
+      <div class="flex items-center gap-3">
+        <div id="clockStatusIcon" class="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center">
+          <i class="fas fa-clock text-gray-400"></i>
+        </div>
+        <div>
+          <p class="text-xs text-gray-400">Status Shift</p>
+          <p id="shiftStatusText" class="font-bold text-lg">Belum Clock In</p>
+        </div>
+      </div>
+      <div id="shiftDetailInfo" class="text-right text-sm text-gray-300">
+        <i class="far fa-calendar-alt"></i> Belum memulai shift
+      </div>
+    </div>
+
+    <!-- Main Grid: Clock In / Out Cards -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+      
+      <!-- CLOCK IN CARD -->
+      <div class="glass-card rounded-2xl p-5">
+        <div class="flex items-center gap-3 mb-4 pb-2 border-b border-white/10">
+          <div class="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center"><i class="fas fa-sign-in-alt text-emerald-400 text-xl"></i></div>
+          <div>
+            <h3 class="font-bold text-lg">Clock In</h3>
+            <p class="text-xs text-gray-400">Mulai shift & catat saldo awal</p>
+          </div>
+        </div>
+        
+        <div id="clockInForm">
+          <div class="grid grid-cols-2 gap-4 mb-4">
+            <div>
+              <label class="text-xs text-gray-300 block mb-1"><i class="fas fa-university"></i> Saldo BCA</label>
+              <input type="number" id="saldoAwalBCA" placeholder="0" class="w-full px-4 py-2 rounded-xl bg-black/40 border border-white/20 text-white focus:border-orange-500">
+            </div>
+            <div>
+              <label class="text-xs text-gray-300 block mb-1"><i class="fas fa-money-bill"></i> Saldo Tunai</label>
+              <input type="number" id="saldoAwalTunai" placeholder="0" class="w-full px-4 py-2 rounded-xl bg-black/40 border border-white/20 text-white focus:border-orange-500">
+            </div>
+          </div>
+          <button id="clockInBtn" class="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 py-3 rounded-xl font-bold transition-all flex items-center justify-center gap-2 shadow-lg"><i class="fas fa-fingerprint"></i> Clock In & Simpan</button>
+        </div>
+        
+        <div id="clockInInfo" class="hidden mt-3 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30">
+          <p class="text-sm"><i class="fas fa-check-circle text-emerald-400"></i> Shift dimulai: <span id="clockInTimeDisplay">-</span></p>
+          <p class="text-xs text-gray-300 mt-1">Saldo Awal BCA: <span id="displayAwalBCA">0</span> | Tunai: <span id="displayAwalTunai">0</span></p>
+        </div>
+      </div>
+
+      <!-- CLOCK OUT CARD -->
+      <div class="glass-card rounded-2xl p-5">
+        <div class="flex items-center gap-3 mb-4 pb-2 border-b border-white/10">
+          <div class="w-10 h-10 rounded-xl bg-rose-500/20 flex items-center justify-center"><i class="fas fa-sign-out-alt text-rose-400 text-xl"></i></div>
+          <div>
+            <h3 class="font-bold text-lg">Clock Out</h3>
+            <p class="text-xs text-gray-400">Akhiri shift & catat saldo akhir</p>
+          </div>
+        </div>
+        
+        <div id="clockOutForm" class="hidden">
+          <div class="grid grid-cols-2 gap-4 mb-4">
+            <div>
+              <label class="text-xs text-gray-300 block mb-1"><i class="fas fa-university"></i> Saldo Akhir BCA</label>
+              <input type="number" id="saldoAkhirBCA" placeholder="0" class="w-full px-4 py-2 rounded-xl bg-black/40 border border-white/20 text-white">
+            </div>
+            <div>
+              <label class="text-xs text-gray-300 block mb-1"><i class="fas fa-money-bill"></i> Saldo Akhir Tunai</label>
+              <input type="number" id="saldoAkhirTunai" placeholder="0" class="w-full px-4 py-2 rounded-xl bg-black/40 border border-white/20 text-white">
+            </div>
+          </div>
+          <button id="clockOutBtn" class="w-full bg-gradient-to-r from-orange-500 to-red-600 hover:from-orange-600 hover:to-red-700 py-3 rounded-xl font-bold transition-all flex items-center justify-center gap-2 shadow-lg"><i class="fas fa-flag-checkered"></i> Clock Out & Hitung</button>
+        </div>
+        
+        <div id="clockOutInfo" class="hidden mt-3 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30">
+          <p class="text-sm"><i class="fas fa-hourglass-end"></i> Shift berakhir: <span id="clockOutTimeDisplay">-</span></p>
+          <p class="text-xs text-gray-300 mt-1">Saldo Akhir BCA: <span id="displayAkhirBCA">0</span> | Tunai: <span id="displayAkhirTunai">0</span></p>
+          <div id="resultProfitLoss" class="mt-2 pt-2 border-t border-white/10 font-bold text-sm"></div>
+        </div>
+        
+        <div id="needClockInWarning" class="text-center py-6 text-gray-400">
+          <i class="fas fa-hourglass-half text-3xl mb-2 block"></i>
+          <p>Silakan melakukan Clock In terlebih dahulu</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- PIUTANG SECTION (Receivables) -->
+    <div class="glass-card rounded-2xl p-5 mb-6">
+      <div class="flex flex-wrap justify-between items-center mb-4 pb-2 border-b border-white/10">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center"><i class="fas fa-hand-holding-usd text-amber-400 text-xl"></i></div>
+          <h3 class="font-bold text-lg">Piutang & Tagihan</h3>
+        </div>
+        <button id="addPiutangBtn" class="bg-orange-500/20 hover:bg-orange-500/30 px-4 py-2 rounded-xl text-sm font-semibold transition-all"><i class="fas fa-plus-circle"></i> Tambah Piutang</button>
+      </div>
+      
+      <div id="piutangList" class="space-y-3 max-h-80 overflow-y-auto">
+        <div class="text-center py-8 text-gray-400"><i class="fas fa-spinner fa-pulse"></i> Memuat piutang...</div>
+      </div>
+    </div>
+
+    <!-- RIWAYAT SHIFT (History Logs) -->
+    <div class="glass-card rounded-2xl p-5">
+      <div class="flex items-center gap-3 mb-4 pb-2 border-b border-white/10">
+        <i class="fas fa-history text-orange-400 text-lg"></i>
+        <h3 class="font-bold text-lg">Riwayat Shift</h3>
+      </div>
+      <div id="historyShiftList" class="space-y-3 max-h-64 overflow-y-auto">
+        <div class="text-center py-8 text-gray-400"><i class="fas fa-spinner fa-pulse"></i> Memuat histori...</div>
+      </div>
+    </div>
+
+    <div class="text-center text-gray-500 text-xs mt-6 pb-4">
+      <i class="fas fa-shield-alt"></i> Data realtime tersimpan di Firebase | VLCrave Express
+    </div>
+  </div>
+
+  <script>
+    // Firebase Config
+    const firebaseConfig = {
+      apiKey: "AIzaSyDqigW41nufIzMOtxHjcAN7ZRLFNokHDS0",
+      authDomain: "vlonline.firebaseapp.com",
+      projectId: "vlonline",
+      storageBucket: "vlonline.firebasestorage.app",
+      messagingSenderId: "860419602853",
+      appId: "1:860419602853:web:9f68d7ca09305293ab104c",
+      measurementId: "G-0QVS1K2BHL"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+    
+    // Collections
+    const shiftsRef = db.collection("vlcrave_shifts");
+    const piutangRef = db.collection("vlcrave_piutang");
+    
+    let currentShiftId = null;
+    let currentShiftData = null;
+    
+    // Helper: Format Rupiah
+    function formatRupiah(angka) {
+      return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(angka);
+    }
+    
+    // Helper SweetAlert
+    function showToast(icon, title, text) {
+      Swal.fire({ icon, title, text, background: '#1a1f2e', color: '#fff', confirmButtonColor: '#f97316', timer: 2500, showConfirmButton: false });
+    }
+    
+    // Load Active Shift (belum clock out)
+    async function loadActiveShift() {
+      const snapshot = await shiftsRef.where("clockOut", "==", null).orderBy("clockInTime", "desc").limit(1).get();
+      if (!snapshot.empty) {
+        const doc = snapshot.docs[0];
+        currentShiftId = doc.id;
+        currentShiftData = doc.data();
+        return doc;
+      }
+      return null;
+    }
+    
+    // Update UI berdasarkan shift aktif
+    async function updateUIByShift() {
+      const activeShiftDoc = await loadActiveShift();
+      const clockInFormDiv = document.getElementById("clockInForm");
+      const clockInInfoDiv = document.getElementById("clockInInfo");
+      const clockOutFormDiv = document.getElementById("clockOutForm");
+      const needClockInWarning = document.getElementById("needClockInWarning");
+      const shiftStatusText = document.getElementById("shiftStatusText");
+      const shiftDetailInfo = document.getElementById("shiftDetailInfo");
+      const clockStatusIcon = document.getElementById("clockStatusIcon");
+      
+      if (activeShiftDoc) {
+        const data = activeShiftDoc.data();
+        currentShiftId = activeShiftDoc.id;
+        // Clock In aktif
+        shiftStatusText.innerHTML = '<i class="fas fa-play-circle text-emerald-400"></i> Shift Berjalan';
+        shiftDetailInfo.innerHTML = `<i class="far fa-clock"></i> Mulai: ${new Date(data.clockInTime?.toDate()).toLocaleString('id-ID')}`;
+        clockStatusIcon.innerHTML = '<i class="fas fa-check-circle text-emerald-400 text-xl"></i>';
+        clockStatusIcon.className = "w-10 h-10 rounded-full bg-emerald-500/20 flex items-center justify-center clock-active";
+        
+        clockInFormDiv.classList.add("hidden");
+        clockInInfoDiv.classList.remove("hidden");
+        document.getElementById("clockInTimeDisplay").innerText = new Date(data.clockInTime?.toDate()).toLocaleString();
+        document.getElementById("displayAwalBCA").innerText = formatRupiah(data.saldoAwalBCA);
+        document.getElementById("displayAwalTunai").innerText = formatRupiah(data.saldoAwalTunai);
+        
+        // Cek apakah sudah clock out? data.clockOut ada? karena query hanya yg clockOut null, jadi blm ada clock out
+        clockOutFormDiv.classList.remove("hidden");
+        needClockInWarning.classList.add("hidden");
+        
+        // Prefill form saldo akhir?
+        if (data.saldoAkhirBCA !== undefined) {
+          // sudah clock out, tapi karena query hanya null, seharusnya tidak terjadi. Tapi safety
+        } else {
+          document.getElementById("saldoAkhirBCA").value = "";
+          document.getElementById("saldoAkhirTunai").value = "";
+          document.getElementById("clockOutInfo").classList.add("hidden");
+        }
+      } else {
+        // Tidak ada shift aktif
+        shiftStatusText.innerHTML = '<i class="fas fa-stop-circle text-gray-400"></i> Belum Clock In';
+        shiftDetailInfo.innerHTML = '<i class="far fa-calendar-times"></i> Tidak ada shift aktif';
+        clockStatusIcon.innerHTML = '<i class="fas fa-clock text-gray-500 text-xl"></i>';
+        clockStatusIcon.className = "w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center";
+        clockInFormDiv.classList.remove("hidden");
+        clockInInfoDiv.classList.add("hidden");
+        clockOutFormDiv.classList.add("hidden");
+        needClockInWarning.classList.remove("hidden");
+        document.getElementById("clockOutInfo").classList.add("hidden");
+        currentShiftId = null;
+      }
+    }
+    
+    // CLOCK IN Function
+    document.getElementById("clockInBtn").addEventListener("click", async () => {
+      const saldoBCA = parseInt(document.getElementById("saldoAwalBCA").value);
+      const saldoTunai = parseInt(document.getElementById("saldoAwalTunai").value);
+      if (isNaN(saldoBCA) || isNaN(saldoTunai)) {
+        showToast("error", "Error", "Masukkan nominal saldo awal yang valid!");
+        return;
+      }
+      if (saldoBCA < 0 || saldoTunai < 0) {
+        showToast("warning", "Perhatian", "Saldo tidak boleh negatif");
+        return;
+      }
+      const existing = await loadActiveShift();
+      if (existing) {
+        showToast("info", "Shift Aktif", "Selesaikan shift sebelumnya terlebih dahulu dengan Clock Out");
+        return;
+      }
+      await shiftsRef.add({
+        clockInTime: firebase.firestore.FieldValue.serverTimestamp(),
+        saldoAwalBCA: saldoBCA,
+        saldoAwalTunai: saldoTunai,
+        clockOut: null,
+        saldoAkhirBCA: null,
+        saldoAkhirTunai: null,
+        profitLoss: null,
+        clockOutTime: null
+      });
+      showToast("success", "Clock In Berhasil", "Shift dimulai! Saldo awal tercatat.");
+      document.getElementById("saldoAwalBCA").value = "";
+      document.getElementById("saldoAwalTunai").value = "";
+      await updateUIByShift();
+      loadHistoryShifts();
+    });
+    
+    // CLOCK OUT Function + perhitungan untung/rugi
+    document.getElementById("clockOutBtn").addEventListener("click", async () => {
+      if (!currentShiftId) {
+        showToast("error", "Tidak Ada Shift", "Lakukan Clock In terlebih dahulu");
+        return;
+      }
+      const akhirBCA = parseInt(document.getElementById("saldoAkhirBCA").value);
+      const akhirTunai = parseInt(document.getElementById("saldoAkhirTunai").value);
+      if (isNaN(akhirBCA) || isNaN(akhirTunai)) {
+        showToast("error", "Error", "Masukkan saldo akhir BCA dan Tunai");
+        return;
+      }
+      const shiftDoc = await shiftsRef.doc(currentShiftId).get();
+      const data = shiftDoc.data();
+      const awalBCA = data.saldoAwalBCA;
+      const awalTunai = data.saldoAwalTunai;
+      const totalAwal = awalBCA + awalTunai;
+      const totalAkhir = akhirBCA + akhirTunai;
+      const selisih = totalAkhir - totalAwal;
+      const status = selisih >= 0 ? "Untung" : "Rugi";
+      const profitLossValue = selisih;
+      
+      await shiftsRef.doc(currentShiftId).update({
+        clockOut: true,
+        clockOutTime: firebase.firestore.FieldValue.serverTimestamp(),
+        saldoAkhirBCA: akhirBCA,
+        saldoAkhirTunai: akhirTunai,
+        profitLoss: profitLossValue,
+        profitLossStatus: status
+      });
+      
+      // Tampilkan hasil di modal SweetAlert modern
+      Swal.fire({
+        title: status === "Untung" ? "✨ Hasil Shift + Plus" : "⚠️ Hasil Shift Minus",
+        html: `<div class="text-left">
+          <p><i class="fas fa-chart-line"></i> Total Awal: ${formatRupiah(totalAwal)}</p>
+          <p><i class="fas fa-chart-line"></i> Total Akhir: ${formatRupiah(totalAkhir)}</p>
+          <p class="font-bold ${selisih>=0 ? 'text-emerald-400' : 'text-rose-400'}">${status} : ${formatRupiah(Math.abs(selisih))}</p>
+        </div>`,
+        icon: selisih >= 0 ? "success" : "error",
+        background: "#1a1f2e",
+        confirmButtonColor: "#f97316"
+      });
+      
+      document.getElementById("clockOutInfo").classList.remove("hidden");
+      document.getElementById("clockOutTimeDisplay").innerText = new Date().toLocaleString();
+      document.getElementById("displayAkhirBCA").innerText = formatRupiah(akhirBCA);
+      document.getElementById("displayAkhirTunai").innerText = formatRupiah(akhirTunai);
+      const resultDiv = document.getElementById("resultProfitLoss");
+      resultDiv.innerHTML = `<span class="${selisih>=0 ? 'text-emerald-400' : 'text-rose-400'}"><i class="fas ${selisih>=0 ? 'fa-arrow-up' : 'fa-arrow-down'}"></i> ${status} ${formatRupiah(Math.abs(selisih))}</span>`;
+      
+      await updateUIByShift();
+      loadHistoryShifts();
+      loadPiutang();
+    });
+    
+    // PIUTANG: Load, Add, Bayar
+    async function loadPiutang() {
+      const snapshot = await piutangRef.orderBy("createdAt", "desc").get();
+      const container = document.getElementById("piutangList");
+      if (snapshot.empty) {
+        container.innerHTML = `<div class="text-center py-6 text-gray-400"><i class="fas fa-file-invoice"></i> Belum ada piutang</div>`;
+        return;
+      }
+      let html = "";
+      snapshot.forEach(doc => {
+        const p = doc.data();
+        const id = doc.id;
+        const isLunas = p.status === "lunas";
+        html += `
+          <div class="bg-white/5 rounded-xl p-4 border ${isLunas ? 'border-emerald-500/30' : 'border-amber-500/30'}">
+            <div class="flex flex-wrap justify-between items-start gap-2">
+              <div><p class="font-bold">${escapeHtml(p.namaDebitur)}</p>
+              <p class="text-xs text-gray-400"><i class="far fa-calendar"></i> ${p.tanggalPiutang ? new Date(p.tanggalPiutang?.toDate()).toLocaleDateString() : '-'}</p>
+              <p class="text-sm mt-1">Nominal: <span class="font-semibold">${formatRupiah(p.nominal)}</span></p>
+              <p class="text-xs">Status: ${isLunas ? '<span class="text-emerald-400"><i class="fas fa-check-circle"></i> Lunas</span>' : '<span class="text-amber-400"><i class="fas fa-hourglass-half"></i> Belum Bayar</span>'}</p>
+              </div>
+              <div class="flex gap-2">
+                ${!isLunas ? `<button onclick="bayarPiutang('${id}', ${p.nominal})" class="bg-emerald-600/40 hover:bg-emerald-600 px-3 py-1.5 rounded-xl text-sm"><i class="fas fa-hand-holding-usd"></i> Bayar</button>` : ''}
+                <button onclick="hapusPiutang('${id}')" class="bg-red-500/30 hover:bg-red-500/50 px-3 py-1.5 rounded-xl text-sm"><i class="fas fa-trash"></i></button>
+              </div>
+            </div>
+          </div>
+        `;
+      });
+      container.innerHTML = html;
+    }
+    
+    window.bayarPiutang = async (id, nominal) => {
+      const { value: metode } = await Swal.fire({
+        title: 'Metode Pembayaran',
+        text: `Pembayaran piutang sebesar ${formatRupiah(nominal)} akan ditambahkan ke saldo?`,
+        input: 'select',
+        inputOptions: { 'tunai': 'Tunai (Cash)', 'bca': 'Transfer BCA' },
+        inputPlaceholder: 'Pilih metode',
+        background: '#1a1f2e',
+        color: '#fff',
+        confirmButtonColor: '#f97316'
+      });
+      if (!metode) return;
+      
+      // Update status piutang menjadi lunas
+      await piutangRef.doc(id).update({ status: "lunas", metodeBayar: metode, tanggalBayar: firebase.firestore.FieldValue.serverTimestamp() });
+      
+      // Cek shift aktif untuk menambahkan saldo otomatis ke tunai atau bca
+      const active = await loadActiveShift();
+      if (active) {
+        const shiftData = active.data();
+        let newBCA = shiftData.saldoAkhirBCA !== null && shiftData.saldoAkhirBCA !== undefined ? shiftData.saldoAkhirBCA : shiftData.saldoAwalBCA;
+        let newTunai = shiftData.saldoAkhirTunai !== null && shiftData.saldoAkhirTunai !== undefined ? shiftData.saldoAkhirTunai : shiftData.saldoAwalTunai;
+        
+        if (metode === "bca") newBCA += nominal;
+        else newTunai += nominal;
+        
+        await shiftsRef.doc(currentShiftId).update({
+          saldoAkhirBCA: newBCA,
+          saldoAkhirTunai: newTunai
+        });
+        showToast("success", "Piutang Lunas", `+${formatRupiah(nominal)} ditambahkan ke ${metode === 'bca' ? 'Saldo BCA' : 'Saldo Tunai'} shift berjalan`);
+        if (currentShiftId) {
+          // refresh tampilan clock out info jika terlihat
+          const shiftDocNow = await shiftsRef.doc(currentShiftId).get();
+          if (shiftDocNow.exists && shiftDocNow.data().saldoAkhirBCA !== null) {
+            document.getElementById("displayAkhirBCA").innerText = formatRupiah(shiftDocNow.data().saldoAkhirBCA);
+            document.getElementById("displayAkhirTunai").innerText = formatRupiah(shiftDocNow.data().saldoAkhirTunai);
+          }
+        }
+      } else {
+        showToast("success", "Piutang Lunas", "Pembayaran dicatat. Tidak ada shift aktif, saldo tidak otomatis ditambah.");
+      }
+      loadPiutang();
+    };
+    
+    window.hapusPiutang = async (id) => {
+      const confirm = await Swal.fire({ title: 'Hapus piutang?', text: "Data akan dihapus permanen", icon: 'warning', showCancelButton: true, background: '#1a1f2e' });
+      if (confirm.isConfirmed) {
+        await piutangRef.doc(id).delete();
+        showToast("success", "Terhapus", "Piutang dihapus");
+        loadPiutang();
+      }
+    };
+    
+    document.getElementById("addPiutangBtn").addEventListener("click", async () => {
+      const { value: form } = await Swal.fire({
+        title: 'Tambah Piutang',
+        html: `<input id="namaDebitur" class="swal2-input" placeholder="Nama Debitur">
+               <input id="nominalPiutang" type="number" class="swal2-input" placeholder="Nominal Piutang">`,
+        focusConfirm: false,
+        background: '#1a1f2e',
+        preConfirm: () => {
+          const nama = document.getElementById("namaDebitur").value;
+          const nominal = parseInt(document.getElementById("nominalPiutang").value);
+          if (!nama || !nominal) Swal.showValidationMessage("Isi semua data");
+          return { nama, nominal };
+        }
+      });
+      if (form) {
+        await piutangRef.add({
+          namaDebitur: form.nama,
+          nominal: form.nominal,
+          status: "belum",
+          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+          tanggalPiutang: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        showToast("success", "Piutang Ditambahkan", "Catatan piutang tersimpan");
+        loadPiutang();
+      }
+    });
+    
+    // Riwayat Shift
+    async function loadHistoryShifts() {
+      const snapshot = await shiftsRef.orderBy("clockInTime", "desc").limit(20).get();
+      const container = document.getElementById("historyShiftList");
+      if (snapshot.empty) {
+        container.innerHTML = `<div class="text-center py-6 text-gray-400"><i class="fas fa-database"></i> Belum ada riwayat shift</div>`;
+        return;
+      }
+      let html = "";
+      snapshot.forEach(doc => {
+        const s = doc.data();
+        const clockInDate = s.clockInTime?.toDate();
+        const clockOutDate = s.clockOutTime?.toDate();
+        const profit = s.profitLoss;
+        const isProfit = profit >= 0;
+        html += `
+          <div class="bg-white/5 rounded-xl p-3 border border-white/5">
+            <div class="flex justify-between flex-wrap">
+              <span class="text-sm"><i class="fas fa-play-circle text-emerald-400"></i> ${clockInDate?.toLocaleString() || '-'}</span>
+              <span class="text-sm"><i class="fas fa-stop-circle text-rose-400"></i> ${clockOutDate?.toLocaleString() || 'Belum selesai'}</span>
+            </div>
+            <div class="text-xs text-gray-300 mt-1">Saldo Awal: ${formatRupiah((s.saldoAwalBCA||0)+(s.saldoAwalTunai||0))} → Akhir: ${formatRupiah((s.saldoAkhirBCA||0)+(s.saldoAkhirTunai||0))}</div>
+            ${profit !== undefined ? `<div class="text-xs font-bold ${isProfit ? 'text-emerald-400' : 'text-rose-400'} mt-1"><i class="fas ${isProfit ? 'fa-chart-line' : 'fa-chart-line'}"></i> ${isProfit ? 'Untung' : 'Rugi'} ${formatRupiah(Math.abs(profit))}</div>` : ''}
+          </div>
+        `;
+      });
+      container.innerHTML = html;
+    }
+    
+    function escapeHtml(str) { if(!str) return ''; return str.replace(/[&<>]/g, function(m){if(m==='&') return '&amp;'; if(m==='<') return '&lt;'; if(m==='>') return '&gt;'; return m;}); }
+    
+    // Initial Load
+    async function init() {
+      await updateUIByShift();
+      loadHistoryShifts();
+      loadPiutang();
+      // Real-time listener untuk piutang & shifts update
+      piutangRef.onSnapshot(() => loadPiutang());
+      shiftsRef.onSnapshot(() => { updateUIByShift(); loadHistoryShifts(); });
+    }
+    init();
+  </script>
+</body>
+</html>
