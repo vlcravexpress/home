@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=yes">
   <title>VLCrave Express | Driver Cash Management + Piutang Rincian Item</title>
   <!-- Google Fonts + Tailwind + SweetAlert + Font Awesome -->
-  <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;400;500;600;700;800&display=swap" rel="stylesheet">
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
@@ -53,16 +53,12 @@
       -webkit-appearance: none;
       margin: 0;
     }
-    .balance-number {
-      font-feature-settings: "tnum";
-      font-variant-numeric: tabular-nums;
+    .clock-active {
+      animation: pulseGlow 1.5s infinite;
     }
     @keyframes pulseGlow {
       0%, 100% { box-shadow: 0 0 0 0 rgba(249, 115, 22, 0.4); }
       50% { box-shadow: 0 0 0 8px rgba(249, 115, 22, 0); }
-    }
-    .clock-active {
-      animation: pulseGlow 1.5s infinite;
     }
     /* Untuk item dinamis di modal */
     .item-row {
@@ -72,11 +68,20 @@
       margin-bottom: 12px;
       transition: 0.2s;
     }
-    .remove-item-btn {
-      transition: 0.2s;
+    /* Modal rincian piutang - gaya mobile friendly */
+    .detail-modal-content {
+      max-height: 70vh;
+      overflow-y: auto;
     }
-    .remove-item-btn:hover {
-      background: rgba(220,38,38,0.3);
+    .detail-item {
+      background: rgba(255,255,255,0.05);
+      border-radius: 14px;
+      padding: 12px;
+      margin-bottom: 10px;
+    }
+    /* Custom scroll untuk modal */
+    .custom-scroll::-webkit-scrollbar {
+      width: 3px;
     }
   </style>
 </head>
@@ -92,7 +97,7 @@
         </div>
         <div>
           <h1 class="text-2xl md:text-3xl font-extrabold tracking-tight bg-gradient-to-r from-orange-400 to-amber-300 bg-clip-text text-transparent">VLCrave Express</h1>
-          <p class="text-xs text-gray-400"><i class="fas fa-map-marker-alt"></i> Driver Cash Management | Piutang Itemized</p>
+          <p class="text-xs text-gray-400"><i class="fas fa-map-marker-alt"></i> Driver Cash Management | Rincian Piutang</p>
         </div>
       </div>
       <div class="flex gap-2">
@@ -190,12 +195,12 @@
       </div>
     </div>
 
-    <!-- PIUTANG SECTION (Receivables dengan CRUD & Modal Rincian Item) -->
+    <!-- PIUTANG SECTION dengan tombol Lihat Rincian -->
     <div class="glass-card rounded-2xl p-5 mb-6">
       <div class="flex flex-wrap justify-between items-center mb-4 pb-2 border-b border-white/10">
         <div class="flex items-center gap-3">
           <div class="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center"><i class="fas fa-hand-holding-usd text-amber-400 text-xl"></i></div>
-          <h3 class="font-bold text-lg">Piutang & Tagihan (Itemized)</h3>
+          <h3 class="font-bold text-lg">Piutang & Tagihan</h3>
         </div>
         <button id="addPiutangBtn" class="bg-orange-500/20 hover:bg-orange-500/30 px-4 py-2 rounded-xl text-sm font-semibold transition-all"><i class="fas fa-plus-circle"></i> Tambah Piutang</button>
       </div>
@@ -205,7 +210,7 @@
       </div>
     </div>
 
-    <!-- RIWAYAT SHIFT (History Logs) -->
+    <!-- RIWAYAT SHIFT -->
     <div class="glass-card rounded-2xl p-5">
       <div class="flex items-center gap-3 mb-4 pb-2 border-b border-white/10">
         <i class="fas fa-history text-orange-400 text-lg"></i>
@@ -237,13 +242,13 @@
     
     // Collections
     const shiftsRef = db.collection("vlcrave_shifts");
-    const piutangRef = db.collection("vlcrave_piutang_itemized"); // collection baru dengan rincian
+    const piutangRef = db.collection("vlcrave_piutang_itemized");
     
     let currentShiftId = null;
     let currentShiftData = null;
     
-    // Helper: Format Rupiah
     function formatRupiah(angka) {
+      if (angka === undefined || angka === null) angka = 0;
       return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(angka);
     }
     
@@ -263,7 +268,6 @@
       return null;
     }
     
-    // Update UI berdasarkan shift aktif
     async function updateUIByShift() {
       const activeShiftDoc = await loadActiveShift();
       const clockInFormDiv = document.getElementById("clockInForm");
@@ -291,7 +295,6 @@
         clockOutFormDiv.classList.remove("hidden");
         needClockInWarning.classList.add("hidden");
         
-        // Jika sudah pernah clock out sebagian? tidak mungkin karena clockOut null. Tapi jika ada saldo akhir dari update bayar piutang tampilkan
         if (data.saldoAkhirBCA !== undefined && data.saldoAkhirBCA !== null) {
           document.getElementById("displayAkhirBCA").innerHTML = formatRupiah(data.saldoAkhirBCA);
           document.getElementById("displayAkhirTunai").innerHTML = formatRupiah(data.saldoAkhirTunai);
@@ -387,86 +390,93 @@
       loadHistoryShifts();
     });
     
-    // ======================== PIUTANG CRUD DENGAN MODAL RINCIAN ITEM (QTY, HARGA) ========================
-    // Fungsi untuk membuka modal tambah piutang dengan item dinamis
+    // ============= MODAL TAMBAH PIUTANG (Input manual, tanpa placeholder default) =============
     function openTambahPiutangModal() {
-      // menyimpan item sementara
-      let items = []; // array { namaProduk, qty, harga, subtotal }
+      let items = []; // { namaProduk, qty, harga }
       
-      // Render daftar item di modal
-      const renderItems = (container, itemsArray) => {
+      const renderItems = (container) => {
         if (!container) return;
-        if (itemsArray.length === 0) {
-          container.innerHTML = `<div class="text-center text-gray-400 py-3 text-sm">Belum ada item, klik "Tambah Item"</div>`;
+        if (items.length === 0) {
+          container.innerHTML = `<div class="text-center text-gray-400 py-4 text-sm">Belum ada item. Klik "Tambah Item"</div>`;
           return;
         }
         let html = '';
-        itemsArray.forEach((item, idx) => {
+        items.forEach((item, idx) => {
           const subtotal = (item.qty || 0) * (item.harga || 0);
           html += `
-            <div class="item-row flex flex-wrap gap-3 items-end border-b border-white/10 pb-3 mb-3">
-              <div class="flex-1 min-w-[120px]">
-                <label class="text-xs text-gray-300">Nama Produk</label>
-                <input type="text" data-idx="${idx}" class="item-nama w-full px-2 py-1 rounded-lg bg-black/40 border border-white/20 text-sm" value="${escapeHtml(item.namaProduk)}">
+            <div class="item-row" data-idx="${idx}">
+              <div class="flex flex-wrap gap-2 mb-2">
+                <div class="flex-1 min-w-[130px]">
+                  <label class="text-xs text-gray-300 block">Nama Produk</label>
+                  <input type="text" data-field="nama" value="${escapeHtml(item.namaProduk)}" class="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/20 text-sm" placeholder="Nama produk">
+                </div>
+                <div class="w-24">
+                  <label class="text-xs text-gray-300 block">Qty</label>
+                  <input type="number" data-field="qty" value="${item.qty || ''}" class="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/20 text-sm" placeholder="0">
+                </div>
+                <div class="w-32">
+                  <label class="text-xs text-gray-300 block">Harga (Rp)</label>
+                  <input type="number" data-field="harga" value="${item.harga || ''}" class="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/20 text-sm" placeholder="0">
+                </div>
+                <div class="flex items-end pb-2">
+                  <button type="button" data-remove-idx="${idx}" class="remove-item bg-red-500/30 hover:bg-red-500/50 px-3 py-2 rounded-xl text-sm"><i class="fas fa-trash"></i></button>
+                </div>
               </div>
-              <div class="w-24">
-                <label class="text-xs text-gray-300">Qty</label>
-                <input type="number" data-idx="${idx}" class="item-qty w-full px-2 py-1 rounded-lg bg-black/40 border border-white/20 text-sm" value="${item.qty}">
-              </div>
-              <div class="w-32">
-                <label class="text-xs text-gray-300">Harga (Rp)</label>
-                <input type="number" data-idx="${idx}" class="item-harga w-full px-2 py-1 rounded-lg bg-black/40 border border-white/20 text-sm" value="${item.harga}">
-              </div>
-              <div class="text-right min-w-[80px]">
-                <div class="text-xs text-gray-300">Subtotal</div>
-                <div class="text-sm font-mono">${formatRupiah(subtotal)}</div>
-              </div>
-              <button type="button" data-idx="${idx}" class="remove-item-btn bg-red-500/30 hover:bg-red-500/50 px-2 py-1 rounded-lg text-xs"><i class="fas fa-trash"></i></button>
+              <div class="text-right text-sm text-amber-300">Subtotal: ${formatRupiah(subtotal)}</div>
             </div>
           `;
         });
         container.innerHTML = html;
         
-        // attach event listeners untuk update array
-        document.querySelectorAll('.item-nama').forEach(inp => {
-          inp.addEventListener('change', (e) => { const idx = parseInt(e.target.dataset.idx); if (!isNaN(idx) && itemsArray[idx]) itemsArray[idx].namaProduk = e.target.value; updateTotalPiutang(); });
+        // Pasang event listener ke input
+        document.querySelectorAll('#itemsContainerModal input').forEach(inp => {
+          inp.addEventListener('change', (e) => {
+            const rowDiv = inp.closest('.item-row');
+            if (!rowDiv) return;
+            const idx = parseInt(rowDiv.dataset.idx);
+            if (isNaN(idx) || !items[idx]) return;
+            const field = inp.dataset.field;
+            if (field === 'nama') items[idx].namaProduk = inp.value;
+            if (field === 'qty') items[idx].qty = parseInt(inp.value) || 0;
+            if (field === 'harga') items[idx].harga = parseInt(inp.value) || 0;
+            updateTotal();
+            renderItems(container); // re-render agar subtotal update
+          });
         });
-        document.querySelectorAll('.item-qty').forEach(inp => {
-          inp.addEventListener('change', (e) => { const idx = parseInt(e.target.dataset.idx); if (!isNaN(idx) && itemsArray[idx]) { itemsArray[idx].qty = parseInt(e.target.value) || 0; updateTotalPiutang(); } });
-        });
-        document.querySelectorAll('.item-harga').forEach(inp => {
-          inp.addEventListener('change', (e) => { const idx = parseInt(e.target.dataset.idx); if (!isNaN(idx) && itemsArray[idx]) { itemsArray[idx].harga = parseInt(e.target.value) || 0; updateTotalPiutang(); } });
-        });
-        document.querySelectorAll('.remove-item-btn').forEach(btn => {
-          btn.addEventListener('click', (e) => { const idx = parseInt(btn.dataset.idx); if (!isNaN(idx)) { itemsArray.splice(idx,1); renderItems(container, itemsArray); updateTotalPiutang(); } });
+        document.querySelectorAll('.remove-item').forEach(btn => {
+          btn.addEventListener('click', (e) => {
+            const idx = parseInt(btn.dataset.removeIdx);
+            if (!isNaN(idx)) {
+              items.splice(idx, 1);
+              renderItems(container);
+              updateTotal();
+            }
+          });
         });
       };
       
-      const updateTotalPiutang = () => {
+      const updateTotal = () => {
+        let total = 0;
+        items.forEach(i => { total += (i.qty || 0) * (i.harga || 0); });
         const totalSpan = document.getElementById('dynamicTotalPiutang');
-        if (totalSpan) {
-          let total = 0;
-          items.forEach(i => { total += (i.qty || 0) * (i.harga || 0); });
-          totalSpan.innerText = formatRupiah(total);
-        }
+        if (totalSpan) totalSpan.innerText = formatRupiah(total);
       };
       
-      // Buat modal dengan SweetAlert2 custom
       Swal.fire({
-        title: '<i class="fas fa-file-invoice-dollar"></i> Tambah Piutang (Itemized)',
+        title: '<i class="fas fa-file-invoice-dollar"></i> Tambah Piutang',
         html: `
-          <div class="text-left">
+          <div class="text-left" style="max-height: 65vh; overflow-y: auto; padding-right: 4px;">
             <div class="mb-4">
-              <label class="text-sm font-semibold block text-left mb-1">Nama Debitur</label>
-              <input id="debiturName" class="swal2-input w-full" placeholder="Contoh: Toko Sinar Jaya" style="margin:0;">
+              <label class="text-sm font-semibold block text-left mb-2">Nama Debitur</label>
+              <input id="debiturName" class="swal2-input w-full" placeholder="Masukkan nama debitur" style="margin:0; background:#2a2e45; color:white; border-radius:16px;">
             </div>
-            <div class="mb-2 flex justify-between items-center">
-              <label class="text-sm font-semibold">Rincian Item (Produk, Qty, Harga)</label>
-              <button type="button" id="btnTambahItemModal" class="bg-amber-600/60 hover:bg-amber-600 text-xs px-3 py-1 rounded-full"><i class="fas fa-plus"></i> Tambah Item</button>
+            <div class="mb-3 flex justify-between items-center">
+              <label class="text-sm font-semibold">Rincian Item</label>
+              <button type="button" id="btnTambahItemModal" class="bg-amber-600/60 hover:bg-amber-600 text-xs px-3 py-1.5 rounded-full"><i class="fas fa-plus"></i> Tambah Item</button>
             </div>
-            <div id="itemsContainerModal" class="max-h-64 overflow-y-auto mb-4 p-1"></div>
-            <div class="border-t border-white/20 pt-3 mt-2 text-right">
-              <span class="text-lg font-bold">Total Piutang : </span>
+            <div id="itemsContainerModal" class="space-y-3 mb-4"></div>
+            <div class="border-t border-white/20 pt-3 mt-2 text-right sticky bottom-0 bg-[#1a1f2e]">
+              <span class="text-base font-bold">Total Piutang : </span>
               <span id="dynamicTotalPiutang" class="text-xl font-bold text-amber-400">Rp 0</span>
             </div>
           </div>
@@ -478,7 +488,7 @@
         color: '#fff',
         confirmButtonColor: '#f97316',
         cancelButtonColor: '#6b7280',
-        width: '700px',
+        width: '550px',
         preConfirm: () => {
           const namaDebitur = document.getElementById('debiturName').value.trim();
           if (!namaDebitur) {
@@ -486,35 +496,48 @@
             return false;
           }
           if (items.length === 0) {
-            Swal.showValidationMessage('Minimal tambah satu item produk');
+            Swal.showValidationMessage('Minimal tambah satu item');
             return false;
           }
-          // hitung total nominal
-          let totalNominal = 0;
-          items.forEach(it => { totalNominal += (it.qty || 0) * (it.harga || 0); });
-          if (totalNominal <= 0) {
+          let total = 0;
+          items.forEach(it => { total += (it.qty || 0) * (it.harga || 0); });
+          if (total <= 0) {
             Swal.showValidationMessage('Total piutang harus lebih dari 0');
             return false;
           }
-          return { namaDebitur, items: [...items], totalNominal };
+          // validasi setiap item punya nama
+          for (let i=0; i<items.length; i++) {
+            if (!items[i].namaProduk || items[i].namaProduk.trim() === '') {
+              Swal.showValidationMessage(`Item ke-${i+1}: Nama produk wajib diisi`);
+              return false;
+            }
+            if ((items[i].qty || 0) <= 0) {
+              Swal.showValidationMessage(`Item "${items[i].namaProduk}": Qty harus lebih dari 0`);
+              return false;
+            }
+            if ((items[i].harga || 0) <= 0) {
+              Swal.showValidationMessage(`Item "${items[i].namaProduk}": Harga harus lebih dari 0`);
+              return false;
+            }
+          }
+          return { namaDebitur, items: items.map(it => ({ ...it, namaProduk: it.namaProduk.trim() })), totalNominal: total };
         },
         didOpen: () => {
           const container = document.getElementById('itemsContainerModal');
           const btnTambah = document.getElementById('btnTambahItemModal');
           if (btnTambah) {
             btnTambah.addEventListener('click', () => {
-              items.push({ namaProduk: '', qty: 1, harga: 0 });
-              renderItems(container, items);
-              updateTotalPiutang();
+              items.push({ namaProduk: '', qty: '', harga: '' });
+              renderItems(container);
+              updateTotal();
             });
           }
-          renderItems(container, items);
-          updateTotalPiutang();
+          renderItems(container);
+          updateTotal();
         }
       }).then(async (result) => {
         if (result.isConfirmed && result.value) {
           const { namaDebitur, items, totalNominal } = result.value;
-          // Simpan ke Firestore
           await piutangRef.add({
             namaDebitur: namaDebitur,
             items: items,
@@ -523,13 +546,90 @@
             createdAt: firebase.firestore.FieldValue.serverTimestamp(),
             tanggalPiutang: firebase.firestore.FieldValue.serverTimestamp()
           });
-          showToast("success", "Piutang Ditambahkan", `Total piutang ${formatRupiah(totalNominal)} dengan ${items.length} item`);
+          showToast("success", "Piutang Ditambahkan", `${items.length} item, total ${formatRupiah(totalNominal)}`);
           loadPiutang();
         }
       });
     }
     
-    // Menampilkan list piutang dengan detail item dan tombol bayar/hapus
+    // ============= MODAL LIHAT RINCIAN PIUTANG (Detail Mobile Friendly) =============
+    window.lihatRincianPiutang = (piutangId) => {
+      piutangRef.doc(piutangId).get().then(doc => {
+        if (!doc.exists) return;
+        const data = doc.data();
+        const items = data.items || [];
+        const isLunas = data.status === "lunas";
+        
+        let itemsHtml = '';
+        if (items.length === 0) {
+          itemsHtml = '<div class="text-center text-gray-400 py-4">Tidak ada item rincian</div>';
+        } else {
+          items.forEach((item, idx) => {
+            const subtotal = (item.qty || 0) * (item.harga || 0);
+            itemsHtml += `
+              <div class="detail-item">
+                <div class="flex justify-between items-start">
+                  <div class="flex-1">
+                    <p class="font-semibold text-amber-300">${escapeHtml(item.namaProduk || 'Produk')}</p>
+                    <div class="flex flex-wrap gap-3 text-sm text-gray-300 mt-1">
+                      <span><i class="fas fa-box"></i> Qty: ${item.qty || 0}</span>
+                      <span><i class="fas fa-tag"></i> Harga: ${formatRupiah(item.harga || 0)}</span>
+                    </div>
+                  </div>
+                  <div class="text-right">
+                    <span class="text-sm font-bold text-white">${formatRupiah(subtotal)}</span>
+                  </div>
+                </div>
+              </div>
+            `;
+          });
+        }
+        
+        Swal.fire({
+          title: `<i class="fas fa-receipt"></i> Rincian Piutang`,
+          html: `
+            <div class="text-left detail-modal-content custom-scroll" style="max-height: 65vh; overflow-y: auto;">
+              <div class="bg-white/10 rounded-xl p-3 mb-4">
+                <div class="flex items-center gap-2 mb-2">
+                  <i class="fas fa-user-circle text-orange-400"></i>
+                  <span class="font-bold text-lg">${escapeHtml(data.namaDebitur)}</span>
+                </div>
+                <div class="flex justify-between text-xs text-gray-300">
+                  <span><i class="far fa-calendar"></i> ${data.tanggalPiutang?.toDate ? new Date(data.tanggalPiutang.toDate()).toLocaleDateString('id-ID') : '-'}</span>
+                  <span class="${isLunas ? 'text-emerald-400' : 'text-amber-400'}"><i class="fas ${isLunas ? 'fa-check-circle' : 'fa-hourglass-half'}"></i> ${isLunas ? 'LUNAS' : 'BELUM BAYAR'}</span>
+                </div>
+              </div>
+              
+              <div class="mb-4">
+                <div class="flex justify-between items-center mb-2">
+                  <h4 class="font-semibold text-sm"><i class="fas fa-list-ul"></i> Daftar Item</h4>
+                  <span class="text-xs text-gray-400">${items.length} produk</span>
+                </div>
+                ${itemsHtml}
+              </div>
+              
+              <div class="bg-amber-500/10 rounded-xl p-3 border border-amber-500/30 mt-2">
+                <div class="flex justify-between items-center">
+                  <span class="font-bold text-base">TOTAL PIUTANG</span>
+                  <span class="text-2xl font-extrabold text-amber-400">${formatRupiah(data.nominal)}</span>
+                </div>
+                ${isLunas ? `<div class="mt-2 text-emerald-400 text-xs"><i class="fas fa-check-circle"></i> Telah dibayar via ${data.metodeBayar === 'bca' ? 'Transfer BCA' : 'Tunai'} pada ${data.tanggalBayar?.toDate ? new Date(data.tanggalBayar.toDate()).toLocaleDateString('id-ID') : '-'}</div>` : ''}
+              </div>
+            </div>
+          `,
+          icon: 'info',
+          confirmButtonText: '<i class="fas fa-times-circle"></i> Tutup',
+          background: '#1a1f2e',
+          confirmButtonColor: '#f97316',
+          width: '520px',
+          customClass: {
+            popup: 'rounded-2xl'
+          }
+        });
+      });
+    };
+    
+    // Load Piutang dengan tombol Lihat Rincian & Bayar/Hapus
     async function loadPiutang() {
       const snapshot = await piutangRef.orderBy("createdAt", "desc").get();
       const container = document.getElementById("piutangList");
@@ -542,21 +642,20 @@
         const p = doc.data();
         const id = doc.id;
         const isLunas = p.status === "lunas";
-        // Generate ringkasan item
-        let itemPreview = '';
-        if (p.items && p.items.length) {
-          itemPreview = `<div class="text-xs text-gray-400 mt-1 space-y-1">${p.items.slice(0,2).map(it => `${it.namaProduk || 'Produk'} (${it.qty||0} x ${formatRupiah(it.harga||0)})`).join(', ')}${p.items.length > 2 ? ` +${p.items.length-2} item lain` : ''}</div>`;
-        }
+        const itemCount = p.items?.length || 0;
         html += `
-          <div class="bg-white/5 rounded-xl p-4 border ${isLunas ? 'border-emerald-500/30' : 'border-amber-500/30'}">
+          <div class="bg-white/5 rounded-xl p-4 border ${isLunas ? 'border-emerald-500/30' : 'border-amber-500/30'} transition-all">
             <div class="flex flex-wrap justify-between items-start gap-2">
               <div class="flex-1">
-                <p class="font-bold">${escapeHtml(p.namaDebitur)}</p>
-                ${itemPreview}
-                <p class="text-sm mt-1">Nominal: <span class="font-semibold">${formatRupiah(p.nominal)}</span></p>
-                <p class="text-xs">Status: ${isLunas ? '<span class="text-emerald-400"><i class="fas fa-check-circle"></i> Lunas</span>' : '<span class="text-amber-400"><i class="fas fa-hourglass-half"></i> Belum Bayar</span>'}</p>
+                <div class="flex items-center gap-2 flex-wrap">
+                  <p class="font-bold text-base">${escapeHtml(p.namaDebitur)}</p>
+                  <span class="text-xs bg-white/10 px-2 py-0.5 rounded-full"><i class="fas fa-cubes"></i> ${itemCount} item</span>
+                </div>
+                <p class="text-sm mt-1"><span class="font-semibold text-amber-300">${formatRupiah(p.nominal)}</span></p>
+                <p class="text-xs mt-1">${isLunas ? '<span class="text-emerald-400"><i class="fas fa-check-circle"></i> Lunas</span>' : '<span class="text-amber-400"><i class="fas fa-hourglass-half"></i> Belum bayar</span>'}</p>
               </div>
-              <div class="flex gap-2">
+              <div class="flex gap-2 items-center">
+                <button onclick="lihatRincianPiutang('${id}')" class="bg-sky-500/30 hover:bg-sky-500/50 px-3 py-1.5 rounded-xl text-sm"><i class="fas fa-eye"></i> Rincian</button>
                 ${!isLunas ? `<button onclick="bayarPiutang('${id}', ${p.nominal})" class="bg-emerald-600/40 hover:bg-emerald-600 px-3 py-1.5 rounded-xl text-sm"><i class="fas fa-hand-holding-usd"></i> Bayar</button>` : ''}
                 <button onclick="hapusPiutang('${id}')" class="bg-red-500/30 hover:bg-red-500/50 px-3 py-1.5 rounded-xl text-sm"><i class="fas fa-trash"></i></button>
               </div>
@@ -569,10 +668,11 @@
     
     window.bayarPiutang = async (id, nominal) => {
       const { value: metode } = await Swal.fire({
-        title: 'Metode Pembayaran',
-        text: `Bayar piutang sebesar ${formatRupiah(nominal)}`,
+        title: 'Konfirmasi Pembayaran',
+        text: `Bayar piutang ${formatRupiah(nominal)} ?`,
         input: 'select',
         inputOptions: { 'tunai': 'Tunai (Cash)', 'bca': 'Transfer BCA' },
+        inputPlaceholder: 'Pilih metode pembayaran',
         background: '#1a1f2e',
         confirmButtonColor: '#f97316'
       });
@@ -588,8 +688,7 @@
         if (metode === "bca") newBCA += nominal;
         else newTunai += nominal;
         await shiftsRef.doc(currentShiftId).update({ saldoAkhirBCA: newBCA, saldoAkhirTunai: newTunai });
-        showToast("success", "Piutang Lunas", `+${formatRupiah(nominal)} ditambahkan ke ${metode === 'bca' ? 'BCA' : 'Tunai'}`);
-        // refresh display clock out info
+        showToast("success", "Piutang Lunas", `+${formatRupiah(nominal)} ke ${metode === 'bca' ? 'BCA' : 'Tunai'}`);
         const updated = await shiftsRef.doc(currentShiftId).get();
         if (updated.exists && updated.data().saldoAkhirBCA !== null) {
           document.getElementById("displayAkhirBCA").innerHTML = formatRupiah(updated.data().saldoAkhirBCA);
@@ -613,7 +712,6 @@
     
     document.getElementById("addPiutangBtn").addEventListener("click", openTambahPiutangModal);
     
-    // Riwayat Shift
     async function loadHistoryShifts() {
       const snapshot = await shiftsRef.orderBy("clockInTime", "desc").limit(20).get();
       const container = document.getElementById("historyShiftList");
